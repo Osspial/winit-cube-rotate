@@ -1,8 +1,6 @@
-extern crate gullery;
+#![feature(async_await)]
 #[macro_use]
 extern crate gullery_macros;
-extern crate cgmath_geometry;
-extern crate glutin;
 
 use gullery::ContextState;
 use gullery::buffer::*;
@@ -17,11 +15,12 @@ use cgmath_geometry::rect::{OffsetBox};
 use cgmath::*;
 use glutin::{
     ContextBuilder, GlRequest,
-    event::{DeviceEvent, Event, ElementState, WindowEvent, VirtualKeyCode},
+    event::{DeviceEvent, ElementState, WindowEvent, VirtualKeyCode},
     event_loop::{ControlFlow, EventLoop},
     dpi::LogicalSize,
     window::WindowBuilder,
 };
+use winit_async::{EventLoopAsync, EventAsync as Event};
 use std::time::Instant;
 
 #[derive(Vertex, Clone, Copy)]
@@ -139,53 +138,81 @@ fn main() {
     window.window().request_redraw();
 
     let mut last_frame = Instant::now();
-    event_loop.run(move |event, _, control_flow| {
-        match event {
-            Event::EventsCleared => {
-                if !window_focused {
-                    rotation.y.0 += 1.0;
-                    window.window().request_redraw();
-                }
-            },
-            Event::WindowEvent{event, ..} => match event {
-                WindowEvent::Resized(d) => {
-                    aspect_ratio = (d.width / d.height) as f32;
-                },
-                WindowEvent::Focused(f) => {
-                    window_focused = f;
-                    if f {
-                        window.window().set_cursor_grab(true).ok();
-                        window.window().set_cursor_visible(false);
-                    } else {
-                        window.window().set_cursor_grab(false).ok();
-                        window.window().set_cursor_visible(true);
-                    }
-                },
-                WindowEvent::MouseInput{state: ElementState::Pressed, ..} => {
-                    window.window().set_cursor_grab(true).ok();
-                    window.window().set_cursor_visible(false);
-                    window_focused = true;
-                    window.window().request_redraw();
-                    *control_flow = ControlFlow::Wait;
-                }
-                WindowEvent::KeyboardInput{input, ..}
-                    if input.state == ElementState::Pressed
-                => {
-                    match input.virtual_keycode {
-                        Some(VirtualKeyCode::Escape) => {
-                            window.window().set_cursor_grab(false).ok();
-                            window.window().set_cursor_visible(true);
-                            window_focused = false;
-                            *control_flow = ControlFlow::Poll;
+    event_loop.run_async(async move |mut runner| {
+        loop {
+            if window_focused {
+                println!("wait");
+                runner.wait().await;
+            }
+
+            println!("recv_events");
+            let mut recv_events = runner.recv_events().await;
+            println!("next");
+            while let Some(event) = recv_events.next().await {
+                match event {
+                    Event::WindowEvent{event, ..} => match event {
+                        WindowEvent::Resized(d) => {
+                            aspect_ratio = (d.width / d.height) as f32;
                         },
-                        Some(VirtualKeyCode::Space) => {
-                            use_perspective = !use_perspective;
+                        WindowEvent::Focused(f) => {
+                            window_focused = f;
+                            if f {
+                                window.window().set_cursor_grab(true).ok();
+                                window.window().set_cursor_visible(false);
+                            } else {
+                                window.window().set_cursor_grab(false).ok();
+                                window.window().set_cursor_visible(true);
+                            }
+                        },
+                        WindowEvent::MouseInput{state: ElementState::Pressed, ..} => {
+                            window.window().set_cursor_grab(true).ok();
+                            window.window().set_cursor_visible(false);
+                            window_focused = true;
+                            window.window().request_redraw();
                         }
-                        _ => (),
-                    }
-                    window.window().request_redraw();
-                },
-                WindowEvent::RedrawRequested => {
+                        WindowEvent::KeyboardInput{input, ..}
+                            if input.state == ElementState::Pressed
+                        => {
+                            match input.virtual_keycode {
+                                Some(VirtualKeyCode::Escape) => {
+                                    window.window().set_cursor_grab(false).ok();
+                                    window.window().set_cursor_visible(true);
+                                    window_focused = false;
+                                },
+                                Some(VirtualKeyCode::Space) => {
+                                    use_perspective = !use_perspective;
+                                }
+                                _ => (),
+                            }
+                            window.window().request_redraw();
+                        },
+                        WindowEvent::CloseRequested => return,
+                        _ => ()
+                    },
+                    Event::DeviceEvent{event, ..} => match event {
+                        DeviceEvent::MouseMotion{delta} if window_focused => {
+                            rotation.x.0 += delta.1 as f32 * mouse_sensitivity;
+                            rotation.y.0 += delta.0 as f32 * mouse_sensitivity;
+                            window.window().request_redraw();
+                        },
+                        _ => ()
+                    },
+                    _ => (),
+                }
+            }
+
+            if !window_focused {
+                rotation.y.0 += 1.0;
+                window.window().request_redraw();
+                println!("request redraw");
+            }
+
+            println!("redraw_requests");
+            let mut redraw_requests = recv_events.redraw_requests().await;
+            println!("next");
+            while let Some(window_id) = redraw_requests.next().await {
+                println!("redraw {:?}", window_id);
+                if window_id == window.window().id() {
                     let physical_size = window.window().inner_size().to_physical(window.window().hidpi_factor());
                     render_state.viewport = OffsetBox::new2(0, 0, physical_size.width as u32, physical_size.height as u32);
                     let scale = 1.0 / (fov.to_radians() / 2.0).tan();
@@ -224,23 +251,12 @@ fn main() {
 
                     window.swap_buffers().unwrap();
 
-                    let now = Instant::now();
-                    let framerate = 1.0 / ((now - last_frame).as_millis() as f64 / 1_000.0);
-                    println!("framerate: {}", framerate);
-                    last_frame = now;
-                },
-                WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                _ => ()
-            },
-            Event::DeviceEvent{event, ..} => match event {
-                DeviceEvent::MouseMotion{delta} if window_focused => {
-                    rotation.x.0 += delta.1 as f32 * mouse_sensitivity;
-                    rotation.y.0 += delta.0 as f32 * mouse_sensitivity;
-                    window.window().request_redraw();
-                },
-                _ => ()
-            },
-            _ => ()
+                    // let now = Instant::now();
+                    // let framerate = 1.0 / ((now - last_frame).as_millis() as f64 / 1_000.0);
+                    // println!("framerate: {}", framerate);
+                    // last_frame = now;
+                }
+            }
         }
     });
 }

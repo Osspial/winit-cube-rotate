@@ -1030,7 +1030,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "winit"
 version = "0.20.0-alpha1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "android_glue 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "bitflags 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1054,6 +1053,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "winit"
+version = "0.20.0-alpha1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+replace = "winit 0.20.0-alpha1"
+
+[[package]]
+name = "winit-async"
+version = "0.1.0"
+dependencies = [
+ "winit 0.20.0-alpha1",
+]
+
+[[package]]
 name = "winit-cube-rotate"
 version = "0.1.0"
 dependencies = [
@@ -1061,6 +1073,7 @@ dependencies = [
  "glutin 0.22.0-alpha1 (registry+https://github.com/rust-lang/crates.io-index)",
  "gullery 0.1.0 (git+https://github.com/Osspial/gullery.git)",
  "gullery_macros 0.1.0 (git+https://github.com/Osspial/gullery.git)",
+ "winit-async 0.1.0",
 ]
 
 [[package]]

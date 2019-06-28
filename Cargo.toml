@@ -11,3 +11,8 @@ gullery = {git="https://github.com/Osspial/gullery.git"}
 gullery_macros = {git="https://github.com/Osspial/gullery.git"}
 cgmath-geometry = {git="https://github.com/Osspial/cgmath-geometry.git"}
 glutin = "0.22.0-alpha1"
+# winit-async = {git="https://github.com/Osspial/winit-async.git"}
+winit-async = {path="../winit-async"}
+
+[replace]
+"winit:0.20.0-alpha1" = {path="../winit"}
